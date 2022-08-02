@@ -11,26 +11,49 @@ from time import time
 from torchvision import datasets, transforms
 from torch import nn, optim
 
+def accuracy(out, labels):
+    with torch.no_grad():
+        maxes = torch.argmax(out.detach(), dim=1)
+        corrects = maxes == labels
+        return torch.sum(corrects).item() / len(corrects) 
+
 
 
 class NN_model(nn.Module):
-  def __init__(self,input_size, hidden_sizes, output_size, batch_size):
-    super(NN_model, self).__init__()
-    self.input_size = input_size
-    self.hidden_sizes = hidden_sizes
-    self.output_size = output_size
-    self.batch_size = batch_size
-    self.fc1 = nn.Linear(self.input_size, self.hidden_sizes[0])
-    self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
-    self.fc3 = nn.Linear(hidden_sizes[1], output_size)
-    self.logsoftmax = nn.LogSoftmax(dim=1)
+    def __init__(self,input_size, hidden_sizes, output_size, batch_size):
+        super(NN_model, self).__init__()
+        self.input_size = input_size
+        self.hidden_sizes = hidden_sizes
+        self.output_size = output_size
+        self.batch_size = batch_size
+        self.fc1 = nn.Linear(self.input_size, self.hidden_sizes[0])
+        self.fc2 = nn.Linear(hidden_sizes[0], hidden_sizes[1])
+        self.fc3 = nn.Linear(hidden_sizes[1], output_size)
+        self.logsoftmax = nn.LogSoftmax(dim=1)
 
-  def forward(self, inp):
-    x = torch.relu(self.fc1(inp))
-    x = torch.relu(self.fc2(x))
-    #out = self.logsoftmax(self.fc3(x))
-    out = self.fc3(x)
-    return out
+    def forward(self, inp):
+        x = torch.relu(self.fc1(inp))
+        x = torch.relu(self.fc2(x))
+        #out = self.logsoftmax(self.fc3(x))
+        out = self.fc3(x)
+        return out
+    
+    def batch_accuracy(self, preds, labels):
+        pred_idxs = torch.argmax(preds,dim=0)
+        corrects = pred_idxs == labels
+        return torch.sum(corrects).item() / self.batch_size
+
+    def compute_test_accuracy(self, testset):
+        N = 0
+        total_acc = 0
+        for i, (images, labels) in enumerate(testset):
+            images = images.view(images.shape[0], -1)
+            #onehot_labels = self.onehot_batch(labels).permute(1,0).float()
+            out = self.forward(images)
+            acc = accuracy(out, labels)
+            N += 1
+            total_acc += acc
+        return total_acc / N
 
 def linear_base_function(input, weights, biases, **kwargs):
     f = kwargs["f"]
@@ -264,11 +287,25 @@ class PC_Net2_GPU(object):
         else:
             for i,l in enumerate(self.pc_layers):
                 dw = l.update_params(lr)
+                
+    def compute_test_accuracy(self, testset):
+        N = 0
+        total_acc = 0
+        for i, (images, labels) in enumerate(testset):
+            images = images.view(images.shape[0], -1)
+            #onehot_labels = self.onehot_batch(labels).permute(1,0).float()
+            out = self.forward(images)
+            acc = accuracy(out, labels)
+            N += 1
+            total_acc += acc
+        return total_acc / N
+        
 
-
-    def train(self, trainset, N_epochs = 10,direct_bp = True, loss_fn_str = "mse",print_outputs = True):
+    def train(self, trainset, testset = None, N_epochs = 10,direct_bp = True, loss_fn_str = "mse",print_outputs = True, compute_test_acc = False, save_activity_differences_inference = True):
         losses = []
         accs = []
+        test_accs = []
+        activity_diffs = []
         for n in range(N_epochs):
             print("EPOCH ", n)
             for i, (img, label) in enumerate(trainset):
@@ -277,6 +314,12 @@ class PC_Net2_GPU(object):
                     onehotted_label = torch.tensor(self.onehot_batch(label).reshape(10,self.batch_size), dtype=torch.float).to(self.device)
                 else:
                     onehotted_label = label.to(self.device)
+                if save_activity_differences_inference:
+                    # save initial activities
+                    init_activations = []
+                    out = self.forward(img)
+                    for l in self.pc_layers:
+                        init_activations.append(deepcopy(l.x))
                 # inference
                 if self.use_reconfiguration:
                     es,dparams = self.gradient_infer(img, onehotted_label,loss_fn_str = loss_fn_str)
@@ -284,6 +327,15 @@ class PC_Net2_GPU(object):
                     es,dparams = self.fp_infer(img,onehotted_label,loss_fn_str = loss_fn_str)
                 if self.use_backprop:
                     es,dparams = self.backprop_infer(img, onehotted_label,loss_fn_str = loss_fn_str)
+                    
+                if save_activity_differences_inference:
+                    post_activations = []
+                    for l in self.pc_layers:
+                        post_activations.append(deepcopy(l.x))
+                    layer_diffs = []
+                    for i in range(len(self.pc_layers)):
+                        layer_diffs.append(torch.sum(torch.square(post_activations[i] - init_activations[i])))
+                    activity_diffs.append(np.array(layer_diffs))
                 #weight update
                 if not direct_bp:
                     self.update_params()
@@ -320,4 +372,8 @@ class PC_Net2_GPU(object):
                 losses.append(loss)
                 if print_outputs:
                     print("loss: ", loss)
-        return np.array(losses), np.array(accs)
+                if compute_test_acc is True and testset is not None:
+                    test_acc = self.compute_test_accuracy(testset)
+                    test_accs.append(test_acc)
+
+        return np.array(losses), np.array(accs), np.array(test_accs), np.array(activity_diffs)

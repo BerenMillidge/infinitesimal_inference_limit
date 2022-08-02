@@ -12,6 +12,8 @@ import brewer2mpl
 bmap = brewer2mpl.get_map("Set2", 'qualitative',7)
 colors = bmap.mpl_colors
 
+FORMAT = "png"
+
 def smoothing_filter(x,window_size):
     return np.convolve(x, np.ones(window_size)/window_size, mode='valid')
 
@@ -30,10 +32,19 @@ def plot_distances():
         if mdist > mean_mean_dist + (3 * total_std):
             mdist = mean_mean_dist + (3 * total_std)
         filtered_mean_dists.append(mdist)
-
     std_distances = np.clip(std_distances, -3 * total_std, 3 * total_std)
+    
+    fig = plt.figure(figsize=(12,10))
     plt.plot(xs,filtered_mean_dists)
     plt.fill_between(xs, filtered_mean_dists - std_distances, filtered_mean_dists + std_distances, alpha=0.5)
+    plt.xlabel("Batch number",fontsize=25)
+    plt.ylabel("Mean euclidean distance",fontsize=25)
+    sns.despine(left=False,top=True, right=True, bottom=False)
+    plt.title("Distance from backprop gradients during training",fontsize=30)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    fig.tight_layout()
+    plt.savefig("figures/backprop_pc_distance_plot." + FORMAT, format=FORMAT)
     plt.show()
 
 def plot_cosine_similarities():
@@ -54,7 +65,7 @@ def plot_cosine_similarities():
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     fig.tight_layout()
-    plt.savefig("figures/cosine_sims_plot.jpg")
+    plt.savefig("figures/cosine_sims_plot." + FORMAT, format=FORMAT)
     plt.show()
 
 def plot_losses():
@@ -65,11 +76,20 @@ def plot_losses():
     xs = np.arange(0, len(mean_bp_losses))
     mean_pc_losses = smoothing_filter(np.mean(pc_losses, axis=0),1)
     std_pc_losses = smoothing_filter(np.std(pc_losses, axis=0) / np.sqrt(len(mean_bp_losses)),1)
+    
+    fig = plt.figure(figsize=(12,10))
     plt.plot(xs, mean_bp_losses, label="Backprop",alpha=0.7)
     plt.fill_between(xs, mean_bp_losses - std_bp_losses, mean_bp_losses + std_bp_losses, alpha=0.5)
     plt.plot(xs, mean_pc_losses, label="PC-Nudge",alpha=0.7)
     plt.fill_between(xs, mean_pc_losses - std_pc_losses, mean_pc_losses + std_pc_losses, alpha=0.5)
-    plt.legend()
+    plt.xlabel("Batch number",fontsize=25)
+    plt.ylabel("Training loss",fontsize=25)
+    sns.despine(left=False,top=True, right=True, bottom=False)
+    plt.title("Training loss of PC-Nudge and BP",fontsize=30)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    fig.tight_layout()
+    plt.savefig("figures/training_losses_plot." + FORMAT, format=FORMAT)
     plt.show()
 
 def plot_accs():
@@ -81,20 +101,23 @@ def plot_accs():
     xs = np.arange(0, len(mean_bp_losses))
     mean_pc_losses = smoothing_filter(np.mean(pc_losses, axis=0),5)
     std_pc_losses = smoothing_filter(np.std(pc_losses, axis=0) / np.sqrt(len(mean_bp_losses)),5)
+    
+    print(mean_bp_losses)
+    print(mean_pc_losses)
 
     plt.plot(xs, mean_pc_losses, label="PC-Nudge",alpha=1, color = colors[1])
-    plt.fill_between(xs, mean_pc_losses - std_pc_losses, mean_pc_losses + std_pc_losses, alpha=0.5,color=colors[1])
-    plt.plot(xs, mean_bp_losses, label="Backprop",alpha=0.5, color=colors[2])
-    plt.fill_between(xs, mean_bp_losses - std_bp_losses, mean_bp_losses + std_bp_losses, alpha=0.5,color=colors[2])
+    plt.fill_between(xs, mean_pc_losses - std_pc_losses, mean_pc_losses + std_pc_losses, alpha=0.0,color=colors[1])
+    plt.plot(xs, mean_bp_losses, label="Backprop",alpha=1, color=colors[2])
+    plt.fill_between(xs, mean_bp_losses - std_bp_losses, mean_bp_losses + std_bp_losses, alpha=0.0,color=colors[2])
     plt.legend(fontsize=25)
-    plt.xlabel("Batch Number",fontsize=25)
-    plt.ylabel("Similarity Score",fontsize=25)
+    plt.xlabel("Batch number",fontsize=25)
+    plt.ylabel("Training accuracy",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
-    plt.title("Similarity to backprop gradients during training",fontsize=30)
+    plt.title("Training accuracy of PC-Nudge and BP",fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     fig.tight_layout()
-    plt.savefig("figures/mnist_acc_plot.jpg")
+    plt.savefig("figures/mnist_acc_plot_2." + FORMAT, format = FORMAT)
     plt.show()
 
 
@@ -111,15 +134,15 @@ def plot_lambda_backprop_distances(N_runs,lambda_weights,trainloader, input_size
     sns.set_theme(context='talk',font='sans-serif',font_scale=1.0)
     plt.plot(lambda_weights, distances_mean)
     plt.fill_between(lambda_weights, distances_mean - distances_std, distances_mean + distances_std, alpha=0.5)
-    plt.xlabel("Weighting Coefficient",fontsize=25)
-    plt.ylabel("Total Normalized Euclidean Distance",fontsize=25)
+    plt.xlabel("Weighting coefficient",fontsize=25)
+    plt.ylabel("Total normalized euclidean distance",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
     plt.title("Distance from true backprop gradient by lambda",fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     fig.tight_layout()
     if save_figure:
-        plt.savefig("lambda_weighting_coeff_fig.jpg")
+        plt.savefig("lambda_weighting_coeff_fig." + FORMAT, format=FORMAT)
     plt.show()
     return distances_mean, distances_std, distance_mat
 
@@ -140,15 +163,15 @@ def plot_lambda_activity_equilibrium_distances(N_runs, lambda_weights,trainloade
     sns.set_theme(context='talk',font='sans-serif',font_scale=1.0)
     plt.plot(lambda_weights, distances_mean)
     plt.fill_between(lambda_weights, distances_mean - distances_std, distances_mean + distances_std, alpha=0.5)
-    plt.xlabel("Weighting Coefficient",fontsize=25)
-    plt.ylabel("Total Euclidean Distance",fontsize=25)
+    plt.xlabel("Weighting coefficient",fontsize=25)
+    plt.ylabel("Total euclidean distance",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
-    plt.title("Distance from Free Phase Equilibrium by lambda",fontsize=30)
+    plt.title("Distance from free phase equilibrium by lambda",fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     fig.tight_layout()
     if save_figure:
-        plt.savefig("activity_equilibrium_distances_fig.jpg")
+        plt.savefig("activity_equilibrium_distances_fig." + FORMAT, format=FORMAT)
     plt.show()
     return distances_mean, distances_std, distance_mat
 
@@ -158,14 +181,14 @@ def make_distance_distance_plot(eq_mat, grad_mat):
     for i in range(10):
         plt.plot(eq_mat[i,:], grad_mat[i,:], label="Initialization " + str(i))
     #plt.legend(fontsize=22)
-    plt.xlabel("Distance from Free Phase",fontsize=25)
-    plt.ylabel("Distance from Backprop Gradient",fontsize=25)
+    plt.xlabel("Distance from free phase",fontsize=25)
+    plt.ylabel("Distance from backprop gradient",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
-    plt.title("Distance from Backprop by distance from equilibrium",fontsize=30)
+    plt.title("Distance from backprop by distance from equilibrium",fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     fig.tight_layout()
-    plt.savefig("distance_distance_plot.jpg")
+    plt.savefig("distance_distance_plot." + FORMAT, format=FORMAT)
     plt.show()
 
 def plot_backprop_inference_distance_graph(N_runs,trainloader, input_size, hidden_sizes,output_size, batch_size):
@@ -177,18 +200,19 @@ def plot_backprop_inference_distance_graph(N_runs,trainloader, input_size, hidde
     distance_mat = np.array(distance_mat)
     mean_distances = np.mean(distance_mat, axis=0)
     std_distances = np.std(distance_mat, axis=0) / np.sqrt(N_runs)
+    T = len(mean_distances)
     fig = plt.figure(figsize=(12,10))
     xs = np.arange(0,T)
     plt.plot(xs,mean_distances)
     plt.fill_between(xs, mean_distances - std_distances, mean_distances + std_distances, alpha=0.5)
-    plt.xlabel("Inference Timestep",fontsize=25)
-    plt.ylabel("Euclidean Distance to Backprop Gradients",fontsize=25)
-    plt.title("Distance from Backprop Gradients During Inference", fontsize=30)
+    plt.xlabel("Inference timestep",fontsize=25)
+    plt.ylabel("Euclidean distance to backprop gradients",fontsize=25)
+    plt.title("Distance from backprop gradients during inference", fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     #plt.legend(fontsize=28)
     fig.tight_layout()
-    plt.savefig("backprop_distances_during_inference.jpg")
+    plt.savefig("backprop_distances_during_inference." + FORMAT, format=FORMAT)
     plt.show()
     
 def plot_energies_evolution(Fs, out_Ls, E_tildes):
@@ -199,14 +223,14 @@ def plot_energies_evolution(Fs, out_Ls, E_tildes):
     plt.plot(xs,out_Ls, label="Backprop Loss")
     plt.plot(xs,E_tildes, label="Internal Energy")
     plt.xlabel("Inference timesteps",fontsize=25)
-    plt.ylabel("Energy Value",fontsize=25)
+    plt.ylabel("Energy value",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
     plt.title("Evolution of energy components during inference",fontsize=30)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
     plt.legend(fontsize=28)
     fig.tight_layout()
-    plt.savefig("energies_evolution_fig.jpg")
+    plt.savefig("energies_evolution_fig." + FORMAT, format=FORMAT)
     plt.show()
     
     
@@ -233,11 +257,12 @@ if __name__ == '__main__':
     eq_dists, eq_stds, eq_mat = plot_lambda_activity_equilibrium_distances(N_plot_runs, lambda_weights,trainloader, input_size, hidden_sizes, output_size, batch_size)
     grad_dists, grad_stds, grad_mat = plot_lambda_backprop_distances(N_plot_runs, lambda_weights,trainloader, input_size, hidden_sizes, output_size, batch_size)
     make_distance_distance_plot(eq_mat, grad_mat)
-    #plot_backprop_inference_distance_graph(N_plot_runs,trainloader, input_size, hidden_sizes,output_size, batch_size)
+    plot_backprop_inference_distance_graph(N_plot_runs,trainloader, input_size, hidden_sizes,output_size, batch_size)
     
     # run training experiments
-    pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list = run_training_experiment(N_training_runs,trainloader, input_size, hidden_sizes, output_size, batch_size)
+    #pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list = run_training_experiment(N_training_runs,trainloader, input_size, hidden_sizes, output_size, batch_size)
     plot_cosine_similarities()
     plot_accs()
     plot_losses()
     plot_distances()
+    

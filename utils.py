@@ -115,18 +115,30 @@ def compute_inference_backprop_distances(trainloader, input_size, hidden_sizes,o
             print(d[0:10])
 
     es, dws, xss, ess = pcnet.gradient_infer(images, labels, loss_fn = criterion, store_evolutions = True)
+    
+    #for i in range(len(ess)):
+    #    print("ES ",i)
+    #    for j in range(len(ess[i])):
+    #        print(ess[i][j].shape)
+        
 
-    print(len(ess))
-    print(len(ess[0]))
-    ess = np.array(ess)
-    print(ess.shape)
-    print(ess[0,:])
-    T, L = ess.shape
+    #print(len(ess))
+    #print(len(ess[0]))
+    #print(len(ess[0][0]))
+    #print(len(ess[1]))
+    #print(len(ess[1][0]))
+    #print(ess[0].shape)
+    #print(ess[0,:])
+    #ess = np.array(ess)
+    #print(ess[1][1])
+
+    T = len(ess)
+    L = len(ess[0])
     distances = []
     for t in range(T):
         total_dist = 0
         for l in range(L):
-            total_dist += torch.sum(torch.square(ess[t,l] - ess[0,l])).item()
+            total_dist += torch.sum(torch.square(ess[t][l] - ess[0][l])).item()
         distances.append(deepcopy(total_dist))
     return distances
 
@@ -231,7 +243,6 @@ def compute_distances(lambda_weights, trainloader, input_size, hidden_sizes, out
     return distances
 
 
-
 ### run the learning experiment -- training the network on mnist
 
 def accuracy(out, labels):
@@ -263,7 +274,7 @@ def cosine_similarity(x,y,cosine=False):
     #print(sim.item())
     return sim.item()
 
-def train_network(trainloader, input_size, hidden_sizes, output_size, batch_size):
+def train_network(trainloader, testloader, input_size, hidden_sizes, output_size, batch_size,N_epochs = 5, use_test_accuracy=False, save_activity_differences_inference = False):
     model = NN_model(input_size, hidden_sizes, output_size, batch_size)
     w1, b1 = list(model.fc1.parameters())
     w2, b2 = list(model.fc2.parameters())
@@ -286,14 +297,16 @@ def train_network(trainloader, input_size, hidden_sizes, output_size, batch_size
     pcnet.init_optimizer(optimizer_pc)
     optimizer.zero_grad()
     time0 = time()
-    epochs = 5
     accs = []
     cosine_similarities = []
     all_distances = [] 
     bp_accs = []
     pc_losses = []
     bp_losses = []
-    for e in range(epochs):
+    test_accs_pc = []
+    test_accs_bp = []
+    activity_diffs = []
+    for e in range(N_epochs):
         running_loss = 0
         running_loss_bp = 0
         for i,(images, labels) in enumerate(trainloader):
@@ -311,10 +324,28 @@ def train_network(trainloader, input_size, hidden_sizes, output_size, batch_size
             acc = accuracy(output, labels)
             accs.append(acc)
             print("PC acc: ", acc)
+            # save activity of inference net beforehand
+            if save_activity_differences_inference:
+                # save initial activities
+                init_activations = []
+                out = pcnet.forward(images)
+                for l in pcnet.pc_layers:
+                    init_activations.append(deepcopy(l.x))
 
             es, dws_bp =pcnet.backprop_infer(images, onehot_labels,loss_fn = criterion)
 
             es, dws = pcnet.gradient_infer(images, onehot_labels, loss_fn = criterion,lambda_weight = LAMBDA_VALUE)
+            
+            # save activity of inference net after inference is complete
+            if save_activity_differences_inference:
+                post_activations = []
+                for l in pcnet.pc_layers:
+                    post_activations.append(deepcopy(l.x))
+                layer_diffs = []
+                for i in range(len(pcnet.pc_layers)):
+                    layer_diffs.append(torch.sum(torch.square(post_activations[i] - init_activations[i])))
+                activity_diffs.append(np.array(layer_diffs))
+                print("total activity diff: ", np.sum(np.square(np.array(layer_diffs))))
             cosine_sims = []
             distances = []
             for dw_pc, dw_bp in zip(dws,dws_bp):
@@ -330,8 +361,6 @@ def train_network(trainloader, input_size, hidden_sizes, output_size, batch_size
             cosine_similarities.append(mean_cosine_sim)
             all_distances.append(np.mean(np.array(distances)))
 
-
-
             pcnet.step()
 
             output_bp = model(images)
@@ -344,35 +373,46 @@ def train_network(trainloader, input_size, hidden_sizes, output_size, batch_size
             loss_bp.backward()
             optimizer.step()
 
-            
             running_loss += loss.item()
             running_loss_bp += loss_bp.item()
+            if use_test_accuracy is True and testloader is not None:
+                test_acc_pc = pcnet.compute_test_accuracy(testloader)
+                test_accs_pc.append(test_acc_pc)
+                print("PC test acc: ", test_acc_pc)
+                
+                test_acc_bp = model.compute_test_accuracy(testloader)
+                test_accs_bp.append(test_acc_bp)
+                print("BP test acc:", test_acc_bp)
         else:
             print("Epoch {} - Training loss: {}".format(e, running_loss/len(trainloader)))
             #print("RUNNING LOSS BP: ", running_loss_bp)
             print("\nTraining Time (in minutes) =",(time()-time0)/60)
             print("acc: ", acc)
             print("acc bp: ", acc_bp)
-    return pc_losses, accs, bp_losses, bp_accs, cosine_similarities, all_distances
+    return pc_losses, accs, bp_losses, bp_accs, cosine_similarities, all_distances, test_accs_pc, test_accs_bp, activity_diffs
 
 
-
-
-def run_training_experiment(N_runs, trainloader, input_size, hidden_sizes, output_size, batch_size):
+def run_training_experiment(N_runs, trainloader, testloader, input_size, hidden_sizes, output_size, batch_size,N_epochs = 5,sname = "run_3",use_test_accuracy=False, save_activity_differences_inference = False):
     pc_loss_list = []
     pc_acc_list = []
     bp_loss_list = []
     bp_acc_list = []
     cosine_sim_list = []
     distance_list = []
+    test_pc_acc_list = []
+    test_bp_acc_list = []
+    activity_diffs_list = []
     for i in range(N_runs):
-        pc_losses, pc_accs, bp_losses, bp_accs, cosine_similarities, all_distances = train_network(trainloader, input_size, hidden_sizes, output_size, batch_size)
+        pc_losses, pc_accs, bp_losses, bp_accs, cosine_similarities, all_distances, test_accs_pc, test_accs_bp, activity_diffs = train_network(trainloader, testloader, input_size, hidden_sizes, output_size, batch_size,N_epochs = N_epochs,use_test_accuracy=use_test_accuracy, save_activity_differences_inference=save_activity_differences_inference)
         pc_loss_list.append(np.array(pc_losses))
         pc_acc_list.append(np.array(pc_accs))
         bp_loss_list.append(np.array(bp_losses))
         bp_acc_list.append(np.array(bp_accs))
         cosine_sim_list.append(np.array(cosine_similarities))
         distance_list.append(np.array(all_distances))
+        test_pc_acc_list.append(np.array(test_accs_pc))
+        test_bp_acc_list.append(np.array(test_bp_acc_list))
+        activity_diffs_list.append(np.array(activity_diffs))
     
     pc_loss_list = np.array(pc_loss_list)
     pc_acc_list = np.array(pc_acc_list)
@@ -380,13 +420,35 @@ def run_training_experiment(N_runs, trainloader, input_size, hidden_sizes, outpu
     bp_acc_list = np.array(bp_acc_list)
     cosine_sim_list = np.array(cosine_sim_list)
     distance_list = np.array(distance_list)
+    test_pc_acc_list = np.array(test_pc_acc_list)
+    test_bp_acc_list = np.array(test_bp_acc_list)
+    activity_diffs_list = np.array(activity_diffs_list)
     if not os.path.exists("data/"):
         os.makedirs("data/")
-    np.save("data/pc_loss_list.npy", pc_loss_list)
-    np.save("data/pc_acc_list.npy", pc_acc_list)
-    np.save("data/bp_loss_list.npy", bp_loss_list)
-    np.save("data/bp_acc_list.npy", bp_acc_list)
-    np.save("data/cosine_sim_list.npy", cosine_sim_list)
-    np.save("data/distance_list.npy", distance_list)
-    return pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list
+    np.save("data/pc_loss_list_" + sname + ".npy", pc_loss_list)
+    np.save("data/pc_acc_list_" + sname + ".npy", pc_acc_list)
+    np.save("data/bp_loss_list_" + sname + ".npy", bp_loss_list)
+    np.save("data/bp_acc_list_" + sname + ".npy", bp_acc_list)
+    np.save("data/cosine_sim_list_" + sname + ".npy", cosine_sim_list)
+    np.save("data/distance_list_" + sname + ".npy", distance_list)
+    np.save("data/test_pc_acc_list_" + sname + ".npy", test_pc_acc_list)
+    np.save("data/test_bp_acc_list_" + sname + ".npy", test_bp_acc_list)
+    np.save("data/activity_diffs_list_" + sname + ".npy", activity_diffs_list)
+    return pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list, test_pc_acc_list, test_bp_acc_list, activity_diffs_list
 
+
+if __name__ == '__main__':
+    input_size = 784
+    hidden_sizes = [128, 64]
+    #hidden_sizes = [100,100]
+    output_size = 10
+    batch_size  = 64
+    N_training_runs = 5 # 5
+    N_plot_runs = 10
+    USE_TEST_ACCURACY = True
+    SAVE_ACTIVITY_DIFFERENCES = True
+    N_epochs = 1
+    
+    
+    trainloader, valloader = load_mnist_data(batch_size)
+    run_training_experiment(N_training_runs, trainloader, valloader,input_size, hidden_sizes, output_size,batch_size, N_epochs = N_epochs,use_test_accuracy=USE_TEST_ACCURACY,save_activity_differences_inference=SAVE_ACTIVITY_DIFFERENCES)
