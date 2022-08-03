@@ -58,8 +58,8 @@ def plot_cosine_similarities():
     xs = np.arange(0, len(mean_sims))
     plt.plot(xs, mean_sims)
     plt.fill_between(xs, mean_sims - std_sims, mean_sims + std_sims, alpha=0.5,color = colors[2])
-    plt.xlabel("Batch Number",fontsize=25)
-    plt.ylabel("Similarity Score",fontsize=25)
+    plt.xlabel("Batch number",fontsize=25)
+    plt.ylabel("Similarity score",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
     plt.title("Similarity to backprop gradients during training",fontsize=30)
     plt.xticks(fontsize=20)
@@ -156,8 +156,6 @@ def plot_lambda_activity_equilibrium_distances(N_runs, lambda_weights,trainloade
     print(distance_mat.shape)
     distances_mean = np.mean(distance_mat, axis=0)
     distances_std = np.std(distance_mat, axis=0) / np.sqrt(N_runs)
-    # this is just a bunch of straightforward graphing
-    # Im very sure that `nudge' PC will work. and we have discovered an approximately linear relationship here
     print(distances)
     fig = plt.figure(figsize=(12,10))
     sns.set_theme(context='talk',font='sans-serif',font_scale=1.0)
@@ -219,10 +217,10 @@ def plot_energies_evolution(Fs, out_Ls, E_tildes):
     fig = plt.figure(figsize=(12,10))
     xs = np.arange(len(Fs))
     sns.set_theme(context='talk',font='sans-serif',font_scale=1.0)
-    plt.plot(xs,Fs, label="Total Energy")
-    plt.plot(xs,out_Ls, label="Backprop Loss")
-    plt.plot(xs,E_tildes, label="Internal Energy")
-    plt.xlabel("Inference timesteps",fontsize=25)
+    plt.plot(xs,Fs, label="Total energy")
+    plt.plot(xs,out_Ls, label="Backprop loss")
+    plt.plot(xs,E_tildes, label="Internal energy")
+    plt.xlabel("Inference timestep",fontsize=25)
     plt.ylabel("Energy value",fontsize=25)
     sns.despine(left=False,top=True, right=True, bottom=False)
     plt.title("Evolution of energy components during inference",fontsize=30)
@@ -260,7 +258,7 @@ if __name__ == '__main__':
     plot_backprop_inference_distance_graph(N_plot_runs,trainloader, input_size, hidden_sizes,output_size, batch_size)
     
     # run training experiments
-    #pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list = run_training_experiment(N_training_runs,trainloader, input_size, hidden_sizes, output_size, batch_size)
+    pc_loss_list, pc_acc_list, bp_loss_list, bp_acc_list, cosine_sim_list, distance_list = run_training_experiment(N_training_runs,trainloader, input_size, hidden_sizes, output_size, batch_size)
     plot_cosine_similarities()
     plot_accs()
     plot_losses()
